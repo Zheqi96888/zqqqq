@@ -6,9 +6,9 @@ import uuid
 
 app = Flask(__name__)
 
-# ==============================
-# 你只需要把这里换成你的 cookies
-# ==============================
+# ==========================
+# 你的 cookies 已经成功了！保留！
+# ==========================
 COOKIE_DATA = """
 # Netscape HTTP Cookie File
 # https://curl.haxx.se/rfc/cookie_spec.html
@@ -25,19 +25,18 @@ COOKIE_DATA = """
 .youtube.com	TRUE	/	TRUE	1809964179	SAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
 .youtube.com	TRUE	/	TRUE	1809964179	__Secure-1PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
 .youtube.com	TRUE	/	TRUE	1809964179	__Secure-3PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
-.youtube.com	TRUE	/	TRUE	1806944728	__Secure-1PSIDTS	sidts-CjQBWhotCep0LkDaQX7SYyEyHtq9R63FSCP2G-nszR3CurCy-uIYN7LxRxQaoTBEgOH7_CJQEAA
-.youtube.com	TRUE	/	TRUE	1806944728	__Secure-3PSIDTS	sidts-CjQBWhotCep0LkDaQX7SYyEyHtq9R63FSCP2G-nszR3CurCy-uIYN7LxRxQaoTBEgOH7_CJQEAA
-.youtube.com	TRUE	/	FALSE	1806944728	SIDCC	AKEyXzXWmCZQOr-L0VBoQUC2znsTJYE0yXwyRR_hIQHUn5ZLGfYe9GcjaWUupyj-Y3uLp8-SMw
-.youtube.com	TRUE	/	TRUE	1806944728	__Secure-1PSIDCC	AKEyXzVO_t2mtI_mpZPm7pIgWyNgZPNBFo0zKJQOfvp2n9ks5_L-xmXMN0a4pmQrg5hsYtt35A
-.youtube.com	TRUE	/	TRUE	1806944728	__Secure-3PSIDCC	AKEyXzVJdalmlqgPZIHVcLQc6mcxD0okbFjRjG_zSI86fqiNTS-cUBbqjdxM-KXTlReRjneUPw
+.youtube.com	TRUE	/	TRUE	1806945331	__Secure-1PSIDTS	sidts-CjQBWhotCW4VqE1GWyApZBtVPkcBpFok5zq8p6PPlzoaFvchKLNhA2hhiHFCdMqWuwMNT6xgEAA
+.youtube.com	TRUE	/	TRUE	1806945331	__Secure-3PSIDTS	sidts-CjQBWhotCW4VqE1GWyApZBtVPkcBpFok5zq8p6PPlzoaFvchKLNhA2hhiHFCdMqWuwMNT6xgEAA
+.youtube.com	TRUE	/	FALSE	1806945331	SIDCC	AKEyXzUfw4-9wo5cSvb6E-U5y3lVuyEi3nSMlBpmE6R59AaLW-QhtvNOOqzIriO04v-yiLoERQ
+.youtube.com	TRUE	/	TRUE	1806945331	__Secure-1PSIDCC	AKEyXzXNqiIRnx9YZ8ifDYn2_15VmB_CYiENpPRNdYv2-SgjZoKxhUQczMXChWsRRQIaiZ1qLA
+.youtube.com	TRUE	/	TRUE	1806945331	__Secure-3PSIDCC	AKEyXzXN5qvCvL4aHIlwr8JJyaAscZ3PgprBNhdLnLimXzCD29YejWL6lLE87VemBTCfAU6TFw
 .youtube.com	TRUE	/	TRUE	1790949286	VISITOR_INFO1_LIVE	J1U9emQQx_s
 .youtube.com	TRUE	/	TRUE	1790949286	VISITOR_PRIVACY_METADATA	CgJTRxIEGgAgYg%3D%3D
 .youtube.com	TRUE	/	TRUE	0	YSC	V4e1hT3Y8Hw
 .youtube.com	TRUE	/	TRUE	1790873304	__Secure-ROLLOUT_TOKEN	CPXQv8HC9tXjEBD3upiQzM-TAxjrpbKd09STAw%3D%3D
 """
-# ==============================
+# ==========================
 
-# 安全写入，绝对不报错
 COOKIE_PATH = "/tmp/cookies.txt"
 with open(COOKIE_PATH, "w", encoding="utf-8") as f:
     f.write(COOKIE_DATA.strip())
@@ -51,14 +50,14 @@ INDEX_HTML = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube → M4A</title>
+    <title>YouTube → 音频</title>
     <style>
         *{box-sizing:border-box;margin:0;padding:0;font-family:Arial}
         body{background:#121212;color:white;padding:30px;display:flex;justify-content:center}
         .box{width:100%;max-width:550px}
         h1{text-align:center;color:red;margin-bottom:20px}
-        input{width:100%;padding:14px;margin:10px 0;border-radius:8px;border:none;font-size:16px}
-        button{width:100%;padding:14px;background:red;color:white;font-size:18px;border:none;border-radius:8px;cursor:pointer}
+        input{width:100%;padding:14px;margin:10px 0;border-radius:8px;border:none}
+        button{width:100%;padding:14px;background:red;color:white;border:none;border-radius:8px;font-size:16px}
         #status{margin-top:20px;padding:15px;border-radius:8px;text-align:center;display:none}
         .loading{background:#222}
         .success{background:#044600}
@@ -67,26 +66,26 @@ INDEX_HTML = """
 </head>
 <body>
     <div class="box">
-        <h1>YouTube → M4A</h1>
+        <h1>YouTube → 音频</h1>
         <input id="url" placeholder="粘贴链接">
-        <button onclick="convert()">下载音频</button>
+        <button onclick="convert()">提取音频</button>
         <div id="status"></div>
     </div>
     <script>
         async function convert(){
-            const s=document.getElementById("status");
-            s.textContent="处理中...";s.className="loading";s.style.display="block";
-            const res=await fetch("/convert",{
+            const s = document.getElementById("status");
+            s.textContent = "处理中..."; s.className="loading"; s.style.display="block";
+            const res = await fetch("/convert",{
                 method:"POST",
                 headers:{"Content-Type":"application/json"},
                 body:JSON.stringify({url:document.getElementById("url").value})
             });
-            const data=await res.json();
+            const data = await res.json();
             if(res.ok){
-                s.textContent="✅ 下载中";s.className="success";
+                s.textContent="✅ 下载中"; s.className="success";
                 location.href="/download/"+data.file_id;
             }else{
-                s.textContent="❌ "+data.error;s.className="error";
+                s.textContent="❌ "+data.error; s.className="error";
             }
         }
     </script>
@@ -98,7 +97,7 @@ INDEX_HTML = """
 def index():
     return render_template_string(INDEX_HTML)
 
-@app.route("/convert", methods=["POST"])
+@app.route("/convert", ["POST"])
 def convert():
     data = request.get_json()
     url = data.get("url")
@@ -108,13 +107,20 @@ def convert():
     file_id = str(uuid.uuid4())
     out = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
+    # ==========================
+    # ✅ 终极修复：下载视频，自动提取声音
+    # ==========================
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio",
+        "format": "worst",  # 最小视频（一定有声音）
         "outtmpl": out,
         "cookiefile": COOKIE_PATH,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "m4a",
+        }],
     }
 
     try:
@@ -127,9 +133,9 @@ def convert():
 @app.route("/download/<file_id>")
 def download(file_id):
     for f in os.listdir(DOWNLOAD_FOLDER):
-        if f.startswith(file_id):
-            return send_file(os.path.join(DOWNLOAD_FOLDER,f), as_attachment=True)
-    return jsonify({"error":"不存在"}),404
+        if f.startswith(file_id) and f.endswith(".m4a"):
+            return send_file(os.path.join(DOWNLOAD_FOLDER, f), as_attachment=True)
+    return jsonify({"error":"文件不存在"}),404
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
