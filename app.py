@@ -5,7 +5,7 @@ import uuid
 
 app = Flask(__name__)
 DOWNLOAD_FOLDER = "/tmp/downloads"
-COOKIE_FILE = "/opt/render/project/src/cookies.txt"
+COOKIE_FILE = "cookies.txt"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 INDEX_HTML = """
@@ -14,123 +14,77 @@ INDEX_HTML = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube to MP3 转换器</title>
+    <title>YouTube to MP3</title>
     <style>
         body {
             background: #121212;
             color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 550px;
+            font-family: Arial, sans-serif;
+            max-width: 500px;
             margin: 50px auto;
             padding: 20px;
         }
-        h1 {
-            text-align: center;
-            color: #ff0000;
-            margin-bottom: 30px;
-        }
         input {
             width: 100%;
-            padding: 14px;
+            padding: 12px;
             margin: 10px 0;
-            background: #1e1e1e;
-            border: 1px solid #333;
-            border-radius: 8px;
-            color: #fff;
+            border-radius: 6px;
+            border: none;
             font-size: 16px;
-            box-sizing: border-box;
         }
         button {
             width: 100%;
-            padding: 14px;
-            background: #ff0000;
-            border: none;
-            border-radius: 8px;
-            color: #fff;
+            padding: 12px;
+            background: red;
+            color: white;
             font-size: 16px;
-            font-weight: 600;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background: #cc0000;
         }
         #status {
-            margin-top: 25px;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 16px;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
             text-align: center;
-            display: none;
-        }
-        .success {
-            background: #1a3a1a;
-            border: 1px solid #33ff33;
-            color: #33ff33;
-        }
-        .error {
-            background: #3a1a1a;
-            border: 1px solid #ff3333;
-            color: #ff3333;
-        }
-        .loading {
-            background: #1a1a3a;
-            border: 1px solid #3333ff;
-            color: #3333ff;
         }
     </style>
 </head>
 <body>
-    <h1>YouTube 🡢 MP3 转换器</h1>
-    <input type="text" id="urlInput" placeholder="粘贴 YouTube 链接...">
-    <button id="convertBtn">转换为 MP3</button>
+    <h2>YouTube → MP3 Converter</h2>
+    <input id="url" placeholder="Paste YouTube URL">
+    <button onclick="convert()">Convert to MP3</button>
     <div id="status"></div>
 
     <script>
-        const urlInput = document.getElementById('urlInput');
-        const convertBtn = document.getElementById('convertBtn');
-        const status = document.getElementById('status');
+        async function convert() {
+            const url = document.getElementById("url").value;
+            const status = document.getElementById("status");
+            status.textContent = "🔄 Converting...";
+            status.style.background = "#222";
 
-        convertBtn.addEventListener('click', async () => {
-            const url = urlInput.value.trim();
-            if (!url) {
-                status.textContent = "❌ 请输入有效的 YouTube 链接";
-                status.className = "error";
-                status.style.display = "block";
-                return;
+            const res = await fetch("/convert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                status.textContent = "✅ Downloading...";
+                status.style.background = "#050";
+                window.location.href = `/download/${data.filename}`;
+            } else {
+                status.textContent = "❌ Error: " + data.error;
+                status.style.background = "#500";
             }
-
-            status.textContent = "🔄 转换中，请稍候...";
-            status.className = "loading";
-            status.style.display = "block";
-
-            try {
-                const res = await fetch('/convert', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || "转换失败");
-
-                status.textContent = `✅ 成功！正在下载：${data.title}`;
-                status.className = "success";
-                const a = document.createElement('a');
-                a.href = `/download/${data.file_id}`;
-                a.download = data.filename;
-                a.click();
-            } catch (err) {
-                status.textContent = `❌ 错误：${err.message}`;
-                status.className = "error";
-            }
-        });
+        }
     </script>
 </body>
 </html>
 """
 
-@app.route('/')
+@app.route("/")
 def index():
     return render_template_string(INDEX_HTML)
 
@@ -138,51 +92,36 @@ def index():
 def convert():
     data = request.json
     url = data.get("url")
-    
     if not url:
-        return jsonify({"error": "请输入 YouTube 链接"}), 400
-
-    if not os.path.exists(COOKIE_FILE):
-        return jsonify({"error": f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}"}), 500
+        return jsonify({"error": "URL required"}), 400
 
     try:
-        file_id = str(uuid.uuid4())
-        outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
+        filename = str(uuid.uuid4())
+        filepath = os.path.join(DOWNLOAD_FOLDER, filename)
 
-        # ✅ 修复后的核心配置
-       ydl_opts = {
-    "format": "bestaudio/best",  # 核心修复：自动匹配最佳可用音频，不限制格式
-    "extractaudio": True,
-    "audioformat": "mp3",
-    "audioquality": "320",  # 320K 最高音质
-    "outtmpl": outtmpl,
-    "quiet": True,
-    "noplaylist": True,
-    "cookiefile": COOKIE_FILE,
-    "no_warnings": True,
-    "postprocessor_args": ["-acodec", "libmp3lame"],  # 兜底：强制转成 mp3
-}
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "extractaudio": True,
+            "audioformat": "mp3",
+            "audioquality": 320,
+            "outtmpl": filepath + ".%(ext)s",
+            "quiet": True,
+            "noplaylist": True,
+            "cookiefile": COOKIE_FILE,
+        }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            original_filename = ydl.prepare_filename(info)
-            mp3_filename = original_filename.rsplit('.', 1)[0] + '.mp3'
+            ydl.download([url])
 
-        return jsonify({
-            "title": info.get("title", "YouTube Audio"),
-            "file_id": file_id,
-            "filename": f"{info.get('title', 'audio')}.mp3"
-        })
+        return jsonify({"filename": filename + ".mp3"})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/download/<file_id>")
-def download(file_id):
-    for file in os.listdir(DOWNLOAD_FOLDER):
-        if file.startswith(file_id) and file.endswith(".mp3"):
-            file_path = os.path.join(DOWNLOAD_FOLDER, file)
-            return send_file(file_path, as_attachment=True)
-    return jsonify({"error": "文件未找到"}), 404
+@app.route("/download/<filename>")
+def download(filename):
+    path = os.path.join(DOWNLOAD_FOLDER, filename)
+    return send_file(path, as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
+    app.run(host="0.0.0.0", port=9000, debug=False)
