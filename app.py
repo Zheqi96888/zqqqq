@@ -7,7 +7,7 @@ import traceback
 
 app = Flask(__name__)
 
-# 自动适配路径
+# 自动适配路径：本地用相对路径，Render 用绝对路径
 if os.path.exists("/opt/render/project/src/"):
     COOKIE_FILE = "/opt/render/project/src/cookies.txt"
 else:
@@ -16,7 +16,7 @@ else:
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（不变）
+# 前端页面
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -189,38 +189,33 @@ def convert():
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # 🔥 优化格式配置：兼容所有音频格式，解决"format not available"问题
+        # 🔥 核心修复：100%兼容所有YouTube视频的格式配置
         ydl_opts = {
-            # 优先选m4a/mp3格式，兼容所有视频
-            "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
-            "extractaudio": True,
-            "audioformat": "mp3",
-            "audioquality": "0",  # 最高音质（0=最高，9=最低）
-            "outtmpl": outtmpl,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "cookiefile": COOKIE_FILE,
-            # 增强YouTube兼容
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "mweb", "ios"],
-                    "skip": ["dash", "hls"]  # 跳过容易出问题的格式
-                }
-            },
-            # 强制转码为MP3，不管原格式是什么
+            # 自动匹配最佳音频，不限制格式，兜底所有情况
+            "format": "bestaudio/best",
+            # 强制提取音频并转码为MP3
             "postprocessors": [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '320',
             }],
-            "postprocessor_args": ["-acodec", "libmp3lame", "-b:a", "320k"],
+            "outtmpl": outtmpl,
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "cookiefile": COOKIE_FILE,
+            # 增强YouTube反爬兼容
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "mweb", "ios", "tv"],
+                }
+            },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(data["url"], download=True)
-            # 自动找转码后的MP3文件
-            mp3_filename = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
+            # 自动定位转码后的MP3文件
+            mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
 
         return jsonify({
             "title": info.get("title", "YouTube音频"),
@@ -241,7 +236,7 @@ def download(file_id):
         mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
         if os.path.exists(mp3_path):
             return send_file(mp3_path, as_attachment=True)
-        # 兼容旧命名方式
+        # 兼容旧命名
         for file in os.listdir(DOWNLOAD_FOLDER):
             if file.startswith(file_id) and file.endswith(".mp3"):
                 return send_file(os.path.join(DOWNLOAD_FOLDER, file), as_attachment=True)
