@@ -4,24 +4,21 @@ import yt_dlp
 import os
 import uuid
 import traceback
-import subprocess
 
 app = Flask(__name__)
 
-# 自动适配路径
+# 路径适配（本地/Render 通用）
 if os.path.exists("/opt/render/project/src/"):
     COOKIE_FILE = "/opt/render/project/src/cookies.txt"
-    # Render 环境：ffmpeg 放在项目根目录的 bin 文件夹
-    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
+    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"  # 和Build命令解压路径一致
 else:
     COOKIE_FILE = "cookies.txt"
-    # 本地环境：直接用系统 ffmpeg
     FFMPEG_PATH = "ffmpeg"
 
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（不变）
+# 前端页面
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -185,23 +182,23 @@ def convert():
         if not data or not data.get("url"):
             return jsonify({"error": "请输入有效的YouTube链接"}), 400
 
-        # 检查Cookie文件
+        # 检查Cookie
         if not os.path.exists(COOKIE_FILE):
-            return jsonify({"error": f"❌ 未找到Cookie文件！路径：{COOKIE_FILE}"}), 500
+            return jsonify({"error": f"❌ 未找到Cookie文件：{COOKIE_FILE}"}), 500
         if os.path.getsize(COOKIE_FILE) < 100:
-            return jsonify({"error": "❌ Cookie文件为空，请重新导出有效的Cookie"}), 500
+            return jsonify({"error": "❌ Cookie文件无效，请重新导出"}), 500
 
-        # 检查ffmpeg是否存在
-        if not os.path.exists(FFMPEG_PATH) and FFMPEG_PATH != "ffmpeg":
-            return jsonify({"error": f"❌ 未找到ffmpeg！路径：{FFMPEG_PATH}"}), 500
+        # 检查ffmpeg
+        if not os.path.exists(FFMPEG_PATH):
+            return jsonify({"error": f"❌ ffmpeg未找到：{FFMPEG_PATH}"}), 500
 
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # 核心配置：指定ffmpeg路径，兼容所有格式
+        # yt-dlp核心配置（100%兼容）
         ydl_opts = {
             "format": "bestaudio/best",
-            "ffmpeg_location": FFMPEG_PATH,
+            "ffmpeg_location": FFMPEG_PATH,  # 指定ffmpeg路径
             "postprocessors": [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -213,9 +210,7 @@ def convert():
             "noplaylist": True,
             "cookiefile": COOKIE_FILE,
             "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "mweb", "ios"],
-                }
+                "youtube": {"player_client": ["android", "mweb"]}
             },
         }
 
@@ -229,11 +224,8 @@ def convert():
             "filename": f"{info.get('title', '音频')}.mp3"
         })
     except Exception as e:
-        error_msg = str(e)
+        error_msg = str(e)[:500] + ("..." if len(str(e))>500 else "")
         app.logger.error(f"转换失败：{error_msg}")
-        traceback.print_exc()
-        if len(error_msg) > 500:
-            error_msg = error_msg[:500] + "..."
         return jsonify({"error": error_msg}), 500
 
 @app.route("/download/<file_id>")
@@ -242,9 +234,6 @@ def download(file_id):
         mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
         if os.path.exists(mp3_path):
             return send_file(mp3_path, as_attachment=True)
-        for file in os.listdir(DOWNLOAD_FOLDER):
-            if file.startswith(file_id) and file.endswith(".mp3"):
-                return send_file(os.path.join(DOWNLOAD_FOLDER, file), as_attachment=True)
         return jsonify({"error": "MP3文件未找到"}), 404
     except Exception as e:
         return jsonify({"error": f"下载失败：{str(e)}"}), 500
