@@ -150,18 +150,18 @@ def convert():
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
         # ✅ 修复后的核心配置
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "extractaudio": True,
-            "audioformat": "mp3",
-            "audioquality": "320",
-            "outtmpl": outtmpl,
-            "quiet": True,
-            "noplaylist": True,
-            "cookiefile": COOKIE_FILE,
-            "no_warnings": True,
-            "postprocessor_args": ["-acodec", "libmp3lame"],
-        }
+       ydl_opts = {
+    "format": "bestaudio/best",  # 核心修复：自动匹配最佳可用音频，不限制格式
+    "extractaudio": True,
+    "audioformat": "mp3",
+    "audioquality": "320",  # 320K 最高音质
+    "outtmpl": outtmpl,
+    "quiet": True,
+    "noplaylist": True,
+    "cookiefile": COOKIE_FILE,
+    "no_warnings": True,
+    "postprocessor_args": ["-acodec", "libmp3lame"],  # 兜底：强制转成 mp3
+}
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
