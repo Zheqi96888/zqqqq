@@ -2,15 +2,16 @@ from flask import Flask, request, jsonify, send_file, render_template_string
 import yt_dlp
 import os
 import uuid
+import traceback # 新增：用来打印详细错误日志
 
 app = Flask(__name__)
-# 🔥 关键：Render 项目根目录绝对路径，确保 cookies 被正确加载
+# Render 项目根目录的cookies路径，和Secret Files的路径对齐
 COOKIE_FILE = "/opt/render/project/src/cookies.txt"
-# 临时下载目录，容器内内存级存储，无需持久化
+# 临时下载目录
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（适配手机/电脑，样式优化）
+# 前端页面（和原来一致，不用改）
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -166,41 +167,60 @@ def convert():
     if not url:
         return jsonify({"error": "请输入 YouTube 链接"}), 400
 
-    # 🔥 强制校验 cookies 是否存在，避免静默失败
+    # 检查cookies文件是否存在
     if not os.path.exists(COOKIE_FILE):
-        return jsonify({"error": f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}"}), 500
+        error_msg = f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}，请检查Secret Files配置"
+        app.logger.error(error_msg)
+        return jsonify({"error": error_msg}), 500
+    # 检查cookies文件是否为空
+    if os.path.getsize(COOKIE_FILE) < 100:
+        error_msg = f"❌ Cookie 文件为空/过小，请重新上传有效的cookies.txt"
+        app.logger.error(error_msg)
+        return jsonify({"error": error_msg}), 500
 
     try:
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # 🔥 核心修复：兼容性拉满的格式配置 + ffmpeg 转码兜底
+        # 修复后的yt-dlp配置，加入了所有兼容参数
         ydl_opts = {
-            "format": "bestaudio/best",  # 自动匹配最佳可用音频，不限制格式
+            "format": "bestaudio/best",
             "extractaudio": True,
             "audioformat": "mp3",
-            "audioquality": "320",  # 强制 320K 高音质
+            "audioquality": "320",
             "outtmpl": outtmpl,
-            "quiet": True,
+            # 🔴 排查问题期间先打开日志，没问题了可以把下面三行注释掉恢复静默模式
+            # "quiet": True,
+            # "no_warnings": True,
+            "verbose": True,
             "noplaylist": True,
-            "cookiefile": "cookies.txt",  # 加载 cookies 绕过机器人验证
-            "no_warnings": True,
-            # 🔥 兜底：强制用 ffmpeg 转码为 mp3，彻底解决格式不可用问题
+            "cookiefile": COOKIE_FILE, # 加载cookies
+            # 兼容YouTube新的PO Token验证
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["mweb", "android", "default"],
+                }
+            },
+            # ffmpeg转码配置
             "postprocessor_args": ["-acodec", "libmp3lame", "-b:a", "320k"],
         }
 
+        app.logger.info(f"开始处理链接：{url}，cookies路径：{COOKIE_FILE}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            # 自动匹配最终 mp3 文件路径
             original_filename = ydl.prepare_filename(info)
             mp3_filename = original_filename.rsplit('.', 1)[0] + '.mp3'
 
+        app.logger.info(f"处理成功：{info.get('title')}")
         return jsonify({
             "title": info.get("title", "YouTube 音频"),
             "file_id": file_id,
             "filename": f"{info.get('title', '音频')}.mp3"
         })
     except Exception as e:
+        # 打印详细错误日志到Render控制台，方便排查
+        app.logger.error(f"处理失败：{str(e)}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route("/download/<file_id>")
@@ -213,5 +233,5 @@ def download(file_id):
     return jsonify({"error": "文件未找到"}), 404
 
 if __name__ == "__main__":
-    # 🔥 适配 Render 端口，优先读取环境变量，默认 9000
+    # 适配Render端口
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
