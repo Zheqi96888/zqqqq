@@ -107,7 +107,7 @@ def convert():
             "outtmpl": filepath + ".%(ext)s",
             "quiet": True,
             "noplaylist": True,
-            "cookiefile": COOKIE_FILE,
+            "cookiefile": "cookies.txt",
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
