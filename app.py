@@ -1,24 +1,33 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, send_file, render_template_string
 import yt_dlp
 import os
 import uuid
-import traceback # 新增：用来打印详细错误日志
+import traceback
 
 app = Flask(__name__)
-# Render 项目根目录的cookies路径，和Secret Files的路径对齐
-COOKIE_FILE = "/opt/render/project/src/cookies.txt"
-# 临时下载目录
+
+# 🔥 自动适配路径：本地用相对路径，Render 用绝对路径
+# 本地运行时，cookies.txt 和 app.py 放在同一个文件夹
+# Render 运行时，自动用项目根目录的绝对路径
+if os.path.exists("/opt/render/project/src/"):
+    # Render 云端环境
+    COOKIE_FILE = "/opt/render/project/src/cookies.txt"
+else:
+    # 本地开发环境
+    COOKIE_FILE = "cookies.txt"
+
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（和原来一致，不用改）
+# 前端页面（适配手机/电脑，样式优化）
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube → MP3 Converter</title>
+    <title>YouTube → MP3 转换器</title>
     <style>
         * {
             box-sizing: border-box;
@@ -130,7 +139,7 @@ INDEX_HTML = """
 
             try {
                 const res = await fetch('/convert', {
-                    method: 'POST',
+                    method: "POST",
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
                 });
@@ -169,7 +178,7 @@ def convert():
 
     # 检查cookies文件是否存在
     if not os.path.exists(COOKIE_FILE):
-        error_msg = f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}，请检查Secret Files配置"
+        error_msg = f"❌ 未找到 Cookie 文件！当前路径：{COOKIE_FILE}，请检查文件位置"
         app.logger.error(error_msg)
         return jsonify({"error": error_msg}), 500
     # 检查cookies文件是否为空
@@ -189,10 +198,8 @@ def convert():
             "audioformat": "mp3",
             "audioquality": "320",
             "outtmpl": outtmpl,
-            # 🔴 排查问题期间先打开日志，没问题了可以把下面三行注释掉恢复静默模式
-            # "quiet": True,
-            # "no_warnings": True,
-            "verbose": True,
+            "quiet": True,
+            "no_warnings": True,
             "noplaylist": True,
             "cookiefile": COOKIE_FILE, # 加载cookies
             # 兼容YouTube新的PO Token验证
@@ -218,7 +225,7 @@ def convert():
             "filename": f"{info.get('title', '音频')}.mp3"
         })
     except Exception as e:
-        # 打印详细错误日志到Render控制台，方便排查
+        # 打印详细错误日志到控制台，方便排查
         app.logger.error(f"处理失败：{str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -233,5 +240,5 @@ def download(file_id):
     return jsonify({"error": "文件未找到"}), 404
 
 if __name__ == "__main__":
-    # 适配Render端口
+    # 适配Render端口，优先读取环境变量，默认9000
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
