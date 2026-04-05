@@ -18,16 +18,16 @@ INDEX_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube → MP3</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        body { background: #121212; color: white; padding: 30px; display: flex; justify-content: center; }
-        .box { width: 100%; max-width: 550px; }
-        h1 { text-align: center; color: red; margin-bottom: 20px; }
-        input { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; }
-        button { width: 100%; padding: 14px; background: red; color: white; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; }
-        #status { margin-top: 20px; padding: 15px; border-radius: 8px; text-align: center; display: none; }
-        .loading { background: #222; color: #aaa; }
-        .success { background: #044600; color: white; }
-        .error { background: #5a0000; color: white; }
+        * { box-sizing: border-box; margin:0; padding:0; font-family: Arial, sans-serif; }
+        body { background:#121212; color:white; padding:30px; display:flex; justify-content:center; }
+        .box { width:100%; max-width:550px; }
+        h1 { text-align:center; color:red; margin-bottom:20px; }
+        input { width:100%; padding:14px; margin:10px 0; border-radius:8px; border:none; font-size:16px; }
+        button { width:100%; padding:14px; background:red; color:white; font-size:18px; border:none; border-radius:8px; cursor:pointer; }
+        #status { margin-top:20px; padding:15px; border-radius:8px; text-align:center; display:none; }
+        .loading { background:#222; color:#aaa; }
+        .success { background:#044600; color:white; }
+        .error { background:#5a0000; color:white; }
     </style>
 </head>
 <body>
@@ -76,14 +76,14 @@ def convert():
     data = request.json
     url = data.get("url")
     if not url:
-        return jsonify({"error": "请输入链接"}), 400
+        return jsonify({"error":"请输入链接"}), 400
 
     file_id = str(uuid.uuid4())
     outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-    # 🔥 完全移除 cookie！用安卓模式直接绕过验证
+    # ✅✅✅ 终极修复：下载“带声音的最差画质视频”，再转MP3
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio",
+        "format": "worst[ext=mp4]/worst",  # 下载最小画质视频（一定有声音）
         "ffmpeg_location": FFMPEG_PATH,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
@@ -115,7 +115,7 @@ def download(file_id):
         if f.startswith(file_id) and f.endswith(".mp3"):
             path = os.path.join(DOWNLOAD_FOLDER, f)
             return send_file(path, as_attachment=True)
-    return jsonify({"error": "文件不存在"}), 404
+    return jsonify({"error":"文件不存在"}), 404
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
