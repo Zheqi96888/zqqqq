@@ -7,20 +7,16 @@ import traceback
 
 app = Flask(__name__)
 
-# 🔥 自动适配路径：本地用相对路径，Render 用绝对路径
-# 本地运行时，cookies.txt 和 app.py 放在同一个文件夹
-# Render 运行时，自动用项目根目录的绝对路径
+# 自动适配路径
 if os.path.exists("/opt/render/project/src/"):
-    # Render 云端环境
     COOKIE_FILE = "/opt/render/project/src/cookies.txt"
 else:
-    # 本地开发环境
     COOKIE_FILE = "cookies.txt"
 
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（适配手机/电脑，样式优化）
+# 前端页面（不变）
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -140,16 +136,24 @@ INDEX_HTML = """
             try {
                 const res = await fetch('/convert', {
                     method: "POST",
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({ url })
                 });
+
+                const contentType = res.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const errorText = await res.text();
+                    throw new Error(`后端返回非JSON：${errorText.substring(0, 100)}`);
+                }
 
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "转换失败");
 
                 status.textContent = `✅ 成功！正在下载：${data.title}`;
                 status.className = "success";
-                // 自动触发下载
                 const a = document.createElement('a');
                 a.href = `/download/${data.file_id}`;
                 a.download = data.filename;
@@ -157,6 +161,7 @@ INDEX_HTML = """
             } catch (err) {
                 status.textContent = `❌ 错误：${err.message}`;
                 status.className = "error";
+                console.error("详细错误：", err);
             }
         });
     </script>
@@ -170,75 +175,79 @@ def index():
 
 @app.route("/convert", methods=["POST"])
 def convert():
-    data = request.json
-    url = data.get("url")
-    
-    if not url:
-        return jsonify({"error": "请输入 YouTube 链接"}), 400
-
-    # 检查cookies文件是否存在
-    if not os.path.exists(COOKIE_FILE):
-        error_msg = f"❌ 未找到 Cookie 文件！当前路径：{COOKIE_FILE}，请检查文件位置"
-        app.logger.error(error_msg)
-        return jsonify({"error": error_msg}), 500
-    # 检查cookies文件是否为空
-    if os.path.getsize(COOKIE_FILE) < 100:
-        error_msg = f"❌ Cookie 文件为空/过小，请重新上传有效的cookies.txt"
-        app.logger.error(error_msg)
-        return jsonify({"error": error_msg}), 500
-
     try:
+        data = request.json
+        if not data or not data.get("url"):
+            return jsonify({"error": "请输入有效的YouTube链接"}), 400
+
+        # 检查Cookie文件
+        if not os.path.exists(COOKIE_FILE):
+            return jsonify({"error": f"❌ 未找到Cookie文件！路径：{COOKIE_FILE}"}), 500
+        if os.path.getsize(COOKIE_FILE) < 100:
+            return jsonify({"error": "❌ Cookie文件为空，请重新导出有效的Cookie"}), 500
+
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # 修复后的yt-dlp配置，加入了所有兼容参数
+        # 🔥 优化格式配置：兼容所有音频格式，解决"format not available"问题
         ydl_opts = {
-            "format": "bestaudio/best",
+            # 优先选m4a/mp3格式，兼容所有视频
+            "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
             "extractaudio": True,
             "audioformat": "mp3",
-            "audioquality": "320",
+            "audioquality": "0",  # 最高音质（0=最高，9=最低）
             "outtmpl": outtmpl,
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
-            "cookiefile": COOKIE_FILE, # 加载cookies
-            # 兼容YouTube新的PO Token验证
+            "cookiefile": COOKIE_FILE,
+            # 增强YouTube兼容
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["mweb", "android", "default"],
+                    "player_client": ["android", "mweb", "ios"],
+                    "skip": ["dash", "hls"]  # 跳过容易出问题的格式
                 }
             },
-            # ffmpeg转码配置
+            # 强制转码为MP3，不管原格式是什么
+            "postprocessors": [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
             "postprocessor_args": ["-acodec", "libmp3lame", "-b:a", "320k"],
         }
 
-        app.logger.info(f"开始处理链接：{url}，cookies路径：{COOKIE_FILE}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            original_filename = ydl.prepare_filename(info)
-            mp3_filename = original_filename.rsplit('.', 1)[0] + '.mp3'
+            info = ydl.extract_info(data["url"], download=True)
+            # 自动找转码后的MP3文件
+            mp3_filename = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
 
-        app.logger.info(f"处理成功：{info.get('title')}")
         return jsonify({
-            "title": info.get("title", "YouTube 音频"),
+            "title": info.get("title", "YouTube音频"),
             "file_id": file_id,
             "filename": f"{info.get('title', '音频')}.mp3"
         })
     except Exception as e:
-        # 打印详细错误日志到控制台，方便排查
-        app.logger.error(f"处理失败：{str(e)}")
+        error_msg = str(e)
+        app.logger.error(f"转换失败：{error_msg}")
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        if len(error_msg) > 500:
+            error_msg = error_msg[:500] + "..."
+        return jsonify({"error": error_msg}), 500
 
 @app.route("/download/<file_id>")
 def download(file_id):
-    # 匹配对应的 mp3 文件
-    for file in os.listdir(DOWNLOAD_FOLDER):
-        if file.startswith(file_id) and file.endswith(".mp3"):
-            file_path = os.path.join(DOWNLOAD_FOLDER, file)
-            return send_file(file_path, as_attachment=True)
-    return jsonify({"error": "文件未找到"}), 404
+    try:
+        mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
+        if os.path.exists(mp3_path):
+            return send_file(mp3_path, as_attachment=True)
+        # 兼容旧命名方式
+        for file in os.listdir(DOWNLOAD_FOLDER):
+            if file.startswith(file_id) and file.endswith(".mp3"):
+                return send_file(os.path.join(DOWNLOAD_FOLDER, file), as_attachment=True)
+        return jsonify({"error": "MP3文件未找到"}), 404
+    except Exception as e:
+        return jsonify({"error": f"下载失败：{str(e)}"}), 500
 
 if __name__ == "__main__":
-    # 适配Render端口，优先读取环境变量，默认9000
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
