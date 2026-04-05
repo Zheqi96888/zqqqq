@@ -3,51 +3,13 @@ from flask import Flask, request, jsonify, send_file, render_template_string
 import yt_dlp
 import os
 import uuid
-import tempfile
 
 app = Flask(__name__)
 
-# ====================== 🔥 直接把你的 cookies 内容贴在这里 🔥 ======================
-COOKIE_CONTENT = """
-# 这里替换成你 cookies.txt 里的全部内容
-# Netscape HTTP Cookie File
-# https://curl.haxx.se/rfc/cookie_spec.html
-# This is a generated file! Do not edit.
-
-.youtube.com	TRUE	/	TRUE	1809707600	LOGIN_INFO	AFmmF2swRQIhAKVix7XHrRGd15oprx_zsRcpPg3FYJlktzMpy5zRgYH8AiB4ON1VGla9DlrFcED1vTNWtpvKpIxraGgD4dmd3OwkVw:QUQ3MjNmeGFFYzNtNF96RXEydlBkRkNfUVZpS2RHd0JudlZxMk9lY1pBVThLYlVjWTVhQXZXMjdrV0xocTR4VU5SWkotVV94clVTWGlnSjNVby1xZlNLMVlhdTZKUjJwLURMdW1YVTAtdjFMaVBkX2hGei1TRDNnNXVueG1mUGp3eGJNcVZFb1Rhb24wLThNS254dVhSTVdJRGs2bVNRMF93
-.youtube.com	TRUE	/	TRUE	1809957291	PREF	tz=Asia.Singapore&f4=4010000
-.youtube.com	TRUE	/	FALSE	1809964179	SID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7x4ELk2ACt1YzEHiBiHJJMwACgYKAb4SARESFQHGX2MiOzrzk7EjlYPXyq51-jrdjBoVAUF8yKqXFkRZbO--R3blijSYfDVK0076
-.youtube.com	TRUE	/	TRUE	1806940179	__Secure-1PSIDTS	sidts-CjQBWhotCdDU36UA7sWK0FiOzN0o2CVi-VeebCfaed2znQAzE3KHSTffCL4KPPQmOejhVT1FEAA
-.youtube.com	TRUE	/	TRUE	1806940179	__Secure-3PSIDTS	sidts-CjQBWhotCdDU36UA7sWK0FiOzN0o2CVi-VeebCfaed2znQAzE3KHSTffCL4KPPQmOejhVT1FEAA
-.youtube.com	TRUE	/	TRUE	1809964179	__Secure-1PSID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7Im0B7nwbGpJL31mly852HQACgYKAb8SARESFQHGX2MiPw8yIyHhWQD9wKI6m3O_ZRoVAUF8yKr35yuvRssABFqOB5DWjCQN0076
-.youtube.com	TRUE	/	TRUE	1809964179	__Secure-3PSID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7eSo46eakwXrLu1STMjAWswACgYKATgSARESFQHGX2MiPtYNpXWNtzMM-jh7DXllMxoVAUF8yKraldAoA8vQm9oQBrMgz2wz0076
-.youtube.com	TRUE	/	FALSE	1809964179	HSID	A_LReFYNuPuhA3NKj
-.youtube.com	TRUE	/	TRUE	1809964179	SSID	AzZven4j88HS3Rt2z
-.youtube.com	TRUE	/	FALSE	1809964179	APISID	tpkBOHxGjZkAgZ9E/AkFDLrBCTB0dMl_IX
-.youtube.com	TRUE	/	TRUE	1809964179	SAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
-.youtube.com	TRUE	/	TRUE	1809964179	__Secure-1PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
-.youtube.com	TRUE	/	TRUE	1809964179	__Secure-3PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
-.youtube.com	TRUE	/	FALSE	1806940198	SIDCC	AKEyXzUjHQiCXrlQ7nxo2YKJvwPXJOGt1RuNQr2dfmgcRMDVnTG3hrVfoci5neaSAZewH9Vchw
-.youtube.com	TRUE	/	TRUE	1806940198	__Secure-1PSIDCC	AKEyXzU0CSSVRSTeDS9kmNTb7wBHqqqEq-G4tR_2bkX0FWXi4T5slz2tHRUTJtSUFosQClTWRw
-.youtube.com	TRUE	/	TRUE	1806940198	__Secure-3PSIDCC	AKEyXzWGRMfIe2rEOTO7OgRYO5Kvw8QXPLQ_jKVbbiOzHw2_4lsL9QU28DSxuNuNL94mJmEnCQ
-.youtube.com	TRUE	/	TRUE	1790949286	VISITOR_INFO1_LIVE	J1U9emQQx_s
-.youtube.com	TRUE	/	TRUE	1790949286	VISITOR_PRIVACY_METADATA	CgJTRxIEGgAgYg%3D%3D
-.youtube.com	TRUE	/	TRUE	0	YSC	V4e1hT3Y8Hw
-.youtube.com	TRUE	/	TRUE	1790873304	__Secure-ROLLOUT_TOKEN	CPXQv8HC9tXjEBD3upiQzM-TAxjrpbKd09STAw%3D%3D
-"""
-# ==================================================================================
-
-# 自动创建临时 cookie 文件（Render 唯一可写路径）
-COOKIE_FILE = tempfile.mktemp(suffix=".txt")
-with open(COOKIE_FILE, "w", encoding="utf-8") as f:
-    f.write(COOKIE_CONTENT.strip())
-
-# ffmpeg 路径
 FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -71,31 +33,32 @@ INDEX_HTML = """
 <body>
     <div class="box">
         <h1>YouTube → MP3</h1>
-        <input id="url" placeholder="粘贴链接">
-        <button onclick="convert()">转换</button>
+        <input id="url" placeholder="粘贴YouTube链接">
+        <button onclick="convert()">转换为MP3</button>
         <div id="status"></div>
     </div>
     <script>
         async function convert() {
             const url = document.getElementById("url").value.trim();
             const s = document.getElementById("status");
-            s.textContent = "处理中...";
+            s.textContent = "转换中...";
             s.className = "loading";
             s.style.display = "block";
 
-            const res = await fetch("/convert", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url })
-            });
-            const data = await res.json();
+            try {
+                const res = await fetch("/convert", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
 
-            if (res.ok) {
-                s.textContent = "✅ 转换成功，正在下载";
+                s.textContent = "✅ 下载中...";
                 s.className = "success";
-                window.open(`/download/${data.file_id}`, "_blank");
-            } else {
-                s.textContent = "❌ " + data.error;
+                window.location.href = `/download/${data.file_id}`;
+            } catch (e) {
+                s.textContent = "❌ " + e.message;
                 s.className = "error";
             }
         }
@@ -112,42 +75,37 @@ def index():
 def convert():
     data = request.json
     url = data.get("url")
-
     if not url:
         return jsonify({"error": "请输入链接"}), 400
 
+    file_id = str(uuid.uuid4())
+    outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
+
+    # 🔥 完全移除 cookie！用安卓模式直接绕过验证
+    ydl_opts = {
+        "format": "bestaudio[ext=m4a]/bestaudio",
+        "ffmpeg_location": FFMPEG_PATH,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "320",
+        }],
+        "outtmpl": outtmpl,
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "mweb"],
+            }
+        },
+        "nocheckcertificate": True,
+    }
+
     try:
-        file_id = str(uuid.uuid4())
-        out = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
-
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "ffmpeg_location": FFMPEG_PATH,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }],
-            "outtmpl": out,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "cookiefile": COOKIE_FILE,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "mweb"],
-                }
-            },
-        }
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(url, download=True)
-
-        return jsonify({
-            "file_id": file_id,
-            "title": "音频"
-        })
-
+        return jsonify({"file_id": file_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -155,8 +113,8 @@ def convert():
 def download(file_id):
     for f in os.listdir(DOWNLOAD_FOLDER):
         if f.startswith(file_id) and f.endswith(".mp3"):
-            p = os.path.join(DOWNLOAD_FOLDER, f)
-            return send_file(p, as_attachment=True)
+            path = os.path.join(DOWNLOAD_FOLDER, f)
+            return send_file(path, as_attachment=True)
     return jsonify({"error": "文件不存在"}), 404
 
 if __name__ == "__main__":
