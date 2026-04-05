@@ -8,9 +8,10 @@ import traceback
 app = Flask(__name__)
 
 # 路径适配（本地/Render 通用）
+# 自动适配路径
 if os.path.exists("/opt/render/project/src/"):
-    COOKIE_FILE = "/opt/render/project/src/cookies.txt"
-    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"  # 和Build命令解压路径一致
+    COOKIE_FILE = "/etc/secrets/cookies.txt"  # 🔥 这里是关键！
+    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
 else:
     COOKIE_FILE = "cookies.txt"
     FFMPEG_PATH = "ffmpeg"
