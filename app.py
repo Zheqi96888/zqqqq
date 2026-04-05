@@ -7,7 +7,7 @@ import uuid
 app = Flask(__name__)
 
 # ==========================
-# 你的 cookies 已经成功了！保留！
+# 你的 cookies 保持不变！
 # ==========================
 COOKIE_DATA = """
 # Netscape HTTP Cookie File
@@ -50,7 +50,7 @@ INDEX_HTML = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube → 音频</title>
+    <title>YouTube → MP3</title>
     <style>
         *{box-sizing:border-box;margin:0;padding:0;font-family:Arial}
         body{background:#121212;color:white;padding:30px;display:flex;justify-content:center}
@@ -66,9 +66,9 @@ INDEX_HTML = """
 </head>
 <body>
     <div class="box">
-        <h1>YouTube → 音频</h1>
-        <input id="url" placeholder="粘贴链接">
-        <button onclick="convert()">提取音频</button>
+        <h1>YouTube → MP3</h1>
+        <input id="url" placeholder="粘贴YouTube链接">
+        <button onclick="convert()">下载MP3</button>
         <div id="status"></div>
     </div>
     <script>
@@ -97,7 +97,7 @@ INDEX_HTML = """
 def index():
     return render_template_string(INDEX_HTML)
 
-@app.route("/convert", ["POST"])
+@app.route("/convert", methods=["POST"])
 def convert():
     data = request.get_json()
     url = data.get("url")
@@ -107,9 +107,7 @@ def convert():
     file_id = str(uuid.uuid4())
     out = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-    # ==========================
-    # ✅ 终极修复：下载视频，自动提取声音
-    # ==========================
+    # ✅ 自动下载 → 提取音频 → 转 MP3（高音质）
     ydl_opts = {
         "format": "worst",  # 最小视频（一定有声音）
         "outtmpl": out,
@@ -119,7 +117,8 @@ def convert():
         "noplaylist": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "m4a",
+            "preferredcodec": "mp3",  # 🔥 直接转 MP3
+            "preferredquality": "192", # 🔥 高音质
         }],
     }
 
@@ -133,7 +132,7 @@ def convert():
 @app.route("/download/<file_id>")
 def download(file_id):
     for f in os.listdir(DOWNLOAD_FOLDER):
-        if f.startswith(file_id) and f.endswith(".m4a"):
+        if f.startswith(file_id) and f.endswith(".mp3"):
             return send_file(os.path.join(DOWNLOAD_FOLDER, f), as_attachment=True)
     return jsonify({"error":"文件不存在"}),404
 
