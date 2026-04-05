@@ -3,19 +3,47 @@ from flask import Flask, request, jsonify, send_file, render_template_string
 import yt_dlp
 import os
 import uuid
-import traceback
+import tempfile
 
 app = Flask(__name__)
 
-# 路径适配（本地/Render 通用）
-# 自动适配路径
-if os.path.exists("/opt/render/project/src/"):
-    COOKIE_FILE = "/etc/secrets/cookies.txt"  # 🔥 这里是关键！
-    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
-else:
-    COOKIE_FILE = "cookies.txt"
-    FFMPEG_PATH = "ffmpeg"
+# ====================== 🔥 直接把你的 cookies 内容贴在这里 🔥 ======================
+COOKIE_CONTENT = """
+# 这里替换成你 cookies.txt 里的全部内容
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
 
+.youtube.com	TRUE	/	TRUE	1809707600	LOGIN_INFO	AFmmF2swRQIhAKVix7XHrRGd15oprx_zsRcpPg3FYJlktzMpy5zRgYH8AiB4ON1VGla9DlrFcED1vTNWtpvKpIxraGgD4dmd3OwkVw:QUQ3MjNmeGFFYzNtNF96RXEydlBkRkNfUVZpS2RHd0JudlZxMk9lY1pBVThLYlVjWTVhQXZXMjdrV0xocTR4VU5SWkotVV94clVTWGlnSjNVby1xZlNLMVlhdTZKUjJwLURMdW1YVTAtdjFMaVBkX2hGei1TRDNnNXVueG1mUGp3eGJNcVZFb1Rhb24wLThNS254dVhSTVdJRGs2bVNRMF93
+.youtube.com	TRUE	/	TRUE	1809957291	PREF	tz=Asia.Singapore&f4=4010000
+.youtube.com	TRUE	/	FALSE	1809964179	SID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7x4ELk2ACt1YzEHiBiHJJMwACgYKAb4SARESFQHGX2MiOzrzk7EjlYPXyq51-jrdjBoVAUF8yKqXFkRZbO--R3blijSYfDVK0076
+.youtube.com	TRUE	/	TRUE	1806940179	__Secure-1PSIDTS	sidts-CjQBWhotCdDU36UA7sWK0FiOzN0o2CVi-VeebCfaed2znQAzE3KHSTffCL4KPPQmOejhVT1FEAA
+.youtube.com	TRUE	/	TRUE	1806940179	__Secure-3PSIDTS	sidts-CjQBWhotCdDU36UA7sWK0FiOzN0o2CVi-VeebCfaed2znQAzE3KHSTffCL4KPPQmOejhVT1FEAA
+.youtube.com	TRUE	/	TRUE	1809964179	__Secure-1PSID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7Im0B7nwbGpJL31mly852HQACgYKAb8SARESFQHGX2MiPw8yIyHhWQD9wKI6m3O_ZRoVAUF8yKr35yuvRssABFqOB5DWjCQN0076
+.youtube.com	TRUE	/	TRUE	1809964179	__Secure-3PSID	g.a0008gi0U-PIpPyv1nXu3r7nKgLlh9AeMMliZTm55Dcje6FDU9V7eSo46eakwXrLu1STMjAWswACgYKATgSARESFQHGX2MiPtYNpXWNtzMM-jh7DXllMxoVAUF8yKraldAoA8vQm9oQBrMgz2wz0076
+.youtube.com	TRUE	/	FALSE	1809964179	HSID	A_LReFYNuPuhA3NKj
+.youtube.com	TRUE	/	TRUE	1809964179	SSID	AzZven4j88HS3Rt2z
+.youtube.com	TRUE	/	FALSE	1809964179	APISID	tpkBOHxGjZkAgZ9E/AkFDLrBCTB0dMl_IX
+.youtube.com	TRUE	/	TRUE	1809964179	SAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
+.youtube.com	TRUE	/	TRUE	1809964179	__Secure-1PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
+.youtube.com	TRUE	/	TRUE	1809964179	__Secure-3PAPISID	kLvSnagiidCIQ_AA/A-GePGDWOI6VgCzzj
+.youtube.com	TRUE	/	FALSE	1806940198	SIDCC	AKEyXzUjHQiCXrlQ7nxo2YKJvwPXJOGt1RuNQr2dfmgcRMDVnTG3hrVfoci5neaSAZewH9Vchw
+.youtube.com	TRUE	/	TRUE	1806940198	__Secure-1PSIDCC	AKEyXzU0CSSVRSTeDS9kmNTb7wBHqqqEq-G4tR_2bkX0FWXi4T5slz2tHRUTJtSUFosQClTWRw
+.youtube.com	TRUE	/	TRUE	1806940198	__Secure-3PSIDCC	AKEyXzWGRMfIe2rEOTO7OgRYO5Kvw8QXPLQ_jKVbbiOzHw2_4lsL9QU28DSxuNuNL94mJmEnCQ
+.youtube.com	TRUE	/	TRUE	1790949286	VISITOR_INFO1_LIVE	J1U9emQQx_s
+.youtube.com	TRUE	/	TRUE	1790949286	VISITOR_PRIVACY_METADATA	CgJTRxIEGgAgYg%3D%3D
+.youtube.com	TRUE	/	TRUE	0	YSC	V4e1hT3Y8Hw
+.youtube.com	TRUE	/	TRUE	1790873304	__Secure-ROLLOUT_TOKEN	CPXQv8HC9tXjEBD3upiQzM-TAxjrpbKd09STAw%3D%3D
+"""
+# ==================================================================================
+
+# 自动创建临时 cookie 文件（Render 唯一可写路径）
+COOKIE_FILE = tempfile.mktemp(suffix=".txt")
+with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+    f.write(COOKIE_CONTENT.strip())
+
+# ffmpeg 路径
+FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -26,218 +54,110 @@ INDEX_HTML = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube → MP3 转换器</title>
+    <title>YouTube → MP3</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        body {
-            background: #121212;
-            color: #fff;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .container {
-            width: 100%;
-            max-width: 600px;
-        }
-        h1 {
-            text-align: center;
-            color: #ff0000;
-            margin-bottom: 30px;
-            font-size: 2.5rem;
-        }
-        #url-input {
-            width: 100%;
-            padding: 16px;
-            margin-bottom: 16px;
-            border-radius: 12px;
-            border: 2px solid #333;
-            background: #1e1e1e;
-            color: #fff;
-            font-size: 1.2rem;
-            outline: none;
-            transition: border 0.2s;
-        }
-        #url-input:focus {
-            border-color: #ff0000;
-        }
-        #convert-btn {
-            width: 100%;
-            padding: 16px;
-            background: #ff0000;
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.5rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-            margin-bottom: 24px;
-        }
-        #convert-btn:hover {
-            background: #cc0000;
-        }
-        #status {
-            width: 100%;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-            font-size: 1.2rem;
-            display: none;
-        }
-        .loading {
-            background: #1a1a3a;
-            border: 1px solid #3333ff;
-            color: #3333ff;
-        }
-        .success {
-            background: #1a3a1a;
-            border: 1px solid #33ff33;
-            color: #33ff33;
-        }
-        .error {
-            background: #3a1a1a;
-            border: 1px solid #ff3333;
-            color: #ff3333;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        body { background: #121212; color: white; padding: 30px; display: flex; justify-content: center; }
+        .box { width: 100%; max-width: 550px; }
+        h1 { text-align: center; color: red; margin-bottom: 20px; }
+        input { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: red; color: white; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; }
+        #status { margin-top: 20px; padding: 15px; border-radius: 8px; text-align: center; display: none; }
+        .loading { background: #222; color: #aaa; }
+        .success { background: #044600; color: white; }
+        .error { background: #5a0000; color: white; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>YouTube → MP3 转换器</h1>
-        <input type="text" id="url-input" placeholder="粘贴 YouTube 链接...">
-        <button id="convert-btn">转换为 MP3</button>
+    <div class="box">
+        <h1>YouTube → MP3</h1>
+        <input id="url" placeholder="粘贴链接">
+        <button onclick="convert()">转换</button>
         <div id="status"></div>
     </div>
-
     <script>
-        const urlInput = document.getElementById('url-input');
-        const convertBtn = document.getElementById('convert-btn');
-        const status = document.getElementById('status');
+        async function convert() {
+            const url = document.getElementById("url").value.trim();
+            const s = document.getElementById("status");
+            s.textContent = "处理中...";
+            s.className = "loading";
+            s.style.display = "block";
 
-        convertBtn.addEventListener('click', async () => {
-            const url = urlInput.value.trim();
-            if (!url) {
-                status.textContent = "❌ 请输入有效的 YouTube 链接";
-                status.className = "error";
-                status.style.display = "block";
-                return;
+            const res = await fetch("/convert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                s.textContent = "✅ 转换成功，正在下载";
+                s.className = "success";
+                window.open(`/download/${data.file_id}`, "_blank");
+            } else {
+                s.textContent = "❌ " + data.error;
+                s.className = "error";
             }
-
-            status.textContent = "🔄 转换中，请稍候...";
-            status.className = "loading";
-            status.style.display = "block";
-
-            try {
-                const res = await fetch('/convert', {
-                    method: "POST",
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ url })
-                });
-
-                const contentType = res.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const errorText = await res.text();
-                    throw new Error(`后端返回非JSON：${errorText.substring(0, 100)}`);
-                }
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || "转换失败");
-
-                status.textContent = `✅ 成功！正在下载：${data.title}`;
-                status.className = "success";
-                const a = document.createElement('a');
-                a.href = `/download/${data.file_id}`;
-                a.download = data.filename;
-                a.click();
-            } catch (err) {
-                status.textContent = `❌ 错误：${err.message}`;
-                status.className = "error";
-                console.error("详细错误：", err);
-            }
-        });
+        }
     </script>
 </body>
 </html>
 """
 
-@app.route('/')
+@app.route("/")
 def index():
     return render_template_string(INDEX_HTML)
 
 @app.route("/convert", methods=["POST"])
 def convert():
+    data = request.json
+    url = data.get("url")
+
+    if not url:
+        return jsonify({"error": "请输入链接"}), 400
+
     try:
-        data = request.json
-        if not data or not data.get("url"):
-            return jsonify({"error": "请输入有效的YouTube链接"}), 400
-
-        # 检查Cookie
-        if not os.path.exists(COOKIE_FILE):
-            return jsonify({"error": f"❌ 未找到Cookie文件：{COOKIE_FILE}"}), 500
-        if os.path.getsize(COOKIE_FILE) < 100:
-            return jsonify({"error": "❌ Cookie文件无效，请重新导出"}), 500
-
-        # 检查ffmpeg
-        if not os.path.exists(FFMPEG_PATH):
-            return jsonify({"error": f"❌ ffmpeg未找到：{FFMPEG_PATH}"}), 500
-
         file_id = str(uuid.uuid4())
-        outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
+        out = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # yt-dlp核心配置（100%兼容）
         ydl_opts = {
             "format": "bestaudio/best",
-            "ffmpeg_location": FFMPEG_PATH,  # 指定ffmpeg路径
+            "ffmpeg_location": FFMPEG_PATH,
             "postprocessors": [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "320",
             }],
-            "outtmpl": outtmpl,
+            "outtmpl": out,
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
             "cookiefile": COOKIE_FILE,
             "extractor_args": {
-                "youtube": {"player_client": ["android", "mweb"]}
+                "youtube": {
+                    "player_client": ["android", "mweb"],
+                }
             },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(data["url"], download=True)
-            mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
+            ydl.extract_info(url, download=True)
 
         return jsonify({
-            "title": info.get("title", "YouTube音频"),
             "file_id": file_id,
-            "filename": f"{info.get('title', '音频')}.mp3"
+            "title": "音频"
         })
+
     except Exception as e:
-        error_msg = str(e)[:500] + ("..." if len(str(e))>500 else "")
-        app.logger.error(f"转换失败：{error_msg}")
-        return jsonify({"error": error_msg}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/download/<file_id>")
 def download(file_id):
-    try:
-        mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
-        if os.path.exists(mp3_path):
-            return send_file(mp3_path, as_attachment=True)
-        return jsonify({"error": "MP3文件未找到"}), 404
-    except Exception as e:
-        return jsonify({"error": f"下载失败：{str(e)}"}), 500
+    for f in os.listdir(DOWNLOAD_FOLDER):
+        if f.startswith(file_id) and f.endswith(".mp3"):
+            p = os.path.join(DOWNLOAD_FOLDER, f)
+            return send_file(p, as_attachment=True)
+    return jsonify({"error": "文件不存在"}), 404
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
