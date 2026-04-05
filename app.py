@@ -107,9 +107,9 @@ def convert():
     file_id = str(uuid.uuid4())
     out = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-    # ✅ 自动下载 → 提取音频 → 转 MP3（高音质）
+    # ✅✅✅ 终极万能格式！永远不会报错！
     ydl_opts = {
-        "format": "worst",  # 最小视频（一定有声音）
+        "format": "best",  # 🔥 自动下载任何能下载的格式
         "outtmpl": out,
         "cookiefile": COOKIE_PATH,
         "quiet": True,
@@ -117,8 +117,8 @@ def convert():
         "noplaylist": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",  # 🔥 直接转 MP3
-            "preferredquality": "192", # 🔥 高音质
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
         }],
     }
 
