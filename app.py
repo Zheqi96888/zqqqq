@@ -5,18 +5,16 @@ import uuid
 
 app = Flask(__name__)
 DOWNLOAD_FOLDER = "/tmp/downloads"
-# 关键修正：使用绝对路径，确保 Render 能找到 cookies.txt
 COOKIE_FILE = "/opt/render/project/src/cookies.txt"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面（适配手机/电脑）
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube to MP3 Converter</title>
+    <title>YouTube to MP3 转换器</title>
     <style>
         body {
             background: #121212;
@@ -118,7 +116,6 @@ INDEX_HTML = """
 
                 status.textContent = `✅ 成功！正在下载：${data.title}`;
                 status.className = "success";
-                // 自动触发下载
                 const a = document.createElement('a');
                 a.href = `/download/${data.file_id}`;
                 a.download = data.filename;
@@ -145,7 +142,6 @@ def convert():
     if not url:
         return jsonify({"error": "请输入 YouTube 链接"}), 400
 
-    # 强制检查 Cookie 是否存在
     if not os.path.exists(COOKIE_FILE):
         return jsonify({"error": f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}"}), 500
 
@@ -153,17 +149,18 @@ def convert():
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
+        # ✅ 修复后的核心配置
         ydl_opts = {
-            "format": "bestaudio[ext=m4a]/bestaudio",
+            "format": "bestaudio/best",
             "extractaudio": True,
             "audioformat": "mp3",
-            "audioquality": 320,
+            "audioquality": "320",
             "outtmpl": outtmpl,
             "quiet": True,
             "noplaylist": True,
-            # 关键修正：直接使用写死的绝对路径，确保加载成功
             "cookiefile": COOKIE_FILE,
             "no_warnings": True,
+            "postprocessor_args": ["-acodec", "libmp3lame"],
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -188,5 +185,4 @@ def download(file_id):
     return jsonify({"error": "文件未找到"}), 404
 
 if __name__ == "__main__":
-    # Render 官方端口：10000
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 9000)), debug=False)
