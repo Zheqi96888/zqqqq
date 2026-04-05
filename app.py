@@ -4,19 +4,24 @@ import yt_dlp
 import os
 import uuid
 import traceback
+import subprocess
 
 app = Flask(__name__)
 
-# 自动适配路径：本地用相对路径，Render 用绝对路径
+# 自动适配路径
 if os.path.exists("/opt/render/project/src/"):
     COOKIE_FILE = "/opt/render/project/src/cookies.txt"
+    # Render 环境：ffmpeg 放在项目根目录的 bin 文件夹
+    FFMPEG_PATH = "/opt/render/project/src/bin/ffmpeg"
 else:
     COOKIE_FILE = "cookies.txt"
+    # 本地环境：直接用系统 ffmpeg
+    FFMPEG_PATH = "ffmpeg"
 
 DOWNLOAD_FOLDER = "/tmp/downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# 前端页面
+# 前端页面（不变）
 INDEX_HTML = """
 <!DOCTYPE html>
 <html>
@@ -186,14 +191,17 @@ def convert():
         if os.path.getsize(COOKIE_FILE) < 100:
             return jsonify({"error": "❌ Cookie文件为空，请重新导出有效的Cookie"}), 500
 
+        # 检查ffmpeg是否存在
+        if not os.path.exists(FFMPEG_PATH) and FFMPEG_PATH != "ffmpeg":
+            return jsonify({"error": f"❌ 未找到ffmpeg！路径：{FFMPEG_PATH}"}), 500
+
         file_id = str(uuid.uuid4())
         outtmpl = f"{DOWNLOAD_FOLDER}/{file_id}.%(ext)s"
 
-        # 🔥 核心修复：100%兼容所有YouTube视频的格式配置
+        # 核心配置：指定ffmpeg路径，兼容所有格式
         ydl_opts = {
-            # 自动匹配最佳音频，不限制格式，兜底所有情况
             "format": "bestaudio/best",
-            # 强制提取音频并转码为MP3
+            "ffmpeg_location": FFMPEG_PATH,
             "postprocessors": [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -204,17 +212,15 @@ def convert():
             "no_warnings": True,
             "noplaylist": True,
             "cookiefile": COOKIE_FILE,
-            # 增强YouTube反爬兼容
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android", "mweb", "ios", "tv"],
+                    "player_client": ["android", "mweb", "ios"],
                 }
             },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(data["url"], download=True)
-            # 自动定位转码后的MP3文件
             mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
 
         return jsonify({
@@ -236,7 +242,6 @@ def download(file_id):
         mp3_path = f"{DOWNLOAD_FOLDER}/{file_id}.mp3"
         if os.path.exists(mp3_path):
             return send_file(mp3_path, as_attachment=True)
-        # 兼容旧命名
         for file in os.listdir(DOWNLOAD_FOLDER):
             if file.startswith(file_id) and file.endswith(".mp3"):
                 return send_file(os.path.join(DOWNLOAD_FOLDER, file), as_attachment=True)
