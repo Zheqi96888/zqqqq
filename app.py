@@ -5,7 +5,8 @@ import uuid
 
 app = Flask(__name__)
 DOWNLOAD_FOLDER = "/tmp/downloads"
-COOKIE_FILE = "cookies.txt"
+# 关键修正：使用绝对路径，确保 Render 能找到 cookies.txt
+COOKIE_FILE = "/opt/render/project/src/cookies.txt"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # 前端页面（适配手机/电脑）
@@ -15,7 +16,7 @@ INDEX_HTML = """
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube to MP3 转换器</title>
+    <title>YouTube to MP3 Converter</title>
     <style>
         body {
             background: #121212;
@@ -119,7 +120,7 @@ INDEX_HTML = """
                 status.className = "success";
                 // 自动触发下载
                 const a = document.createElement('a');
-                a.href = `/download/${data.filename}`;
+                a.href = `/download/${data.file_id}`;
                 a.download = data.filename;
                 a.click();
             } catch (err) {
@@ -144,9 +145,9 @@ def convert():
     if not url:
         return jsonify({"error": "请输入 YouTube 链接"}), 400
 
-    # 检查 cookies.txt 是否存在
+    # 强制检查 Cookie 是否存在
     if not os.path.exists(COOKIE_FILE):
-        return jsonify({"error": "cookies.txt 不存在！请上传以绕过 YouTube 机器人验证"}), 500
+        return jsonify({"error": f"❌ 未找到 Cookie 文件！路径：{COOKIE_FILE}"}), 500
 
     try:
         file_id = str(uuid.uuid4())
@@ -156,32 +157,30 @@ def convert():
             "format": "bestaudio[ext=m4a]/bestaudio",
             "extractaudio": True,
             "audioformat": "mp3",
-            "audioquality": 320,  # 320K 最高音质
+            "audioquality": 320,
             "outtmpl": outtmpl,
             "quiet": True,
             "noplaylist": True,
-            "cookiefile": COOKIE_FILE,  # 加载 Cookie 绕过验证
+            # 关键修正：直接使用写死的绝对路径，确保加载成功
+            "cookiefile": COOKIE_FILE,
             "no_warnings": True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            # 自动替换后缀为 .mp3
             original_filename = ydl.prepare_filename(info)
             mp3_filename = original_filename.rsplit('.', 1)[0] + '.mp3'
 
         return jsonify({
-            "title": info.get("title", "YouTube 音频"),
-            "filename": f"{info.get('title', 'audio')}.mp3",
-            "file_id": file_id
+            "title": info.get("title", "YouTube Audio"),
+            "file_id": file_id,
+            "filename": f"{info.get('title', 'audio')}.mp3"
         })
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/download/<file_id>")
 def download(file_id):
-    # 匹配对应的 mp3 文件
     for file in os.listdir(DOWNLOAD_FOLDER):
         if file.startswith(file_id) and file.endswith(".mp3"):
             file_path = os.path.join(DOWNLOAD_FOLDER, file)
@@ -189,5 +188,5 @@ def download(file_id):
     return jsonify({"error": "文件未找到"}), 404
 
 if __name__ == "__main__":
-    # 阿里云 Cloud Run 会自动分配端口，监听 0.0.0.0:9000
-    app.run(host="0.0.0.0", port=9000, debug=False)
+    # Render 官方端口：10000
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
