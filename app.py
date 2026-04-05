@@ -183,7 +183,7 @@ def convert():
             "outtmpl": outtmpl,
             "quiet": True,
             "noplaylist": True,
-            "cookiefile": “cookies.txt",  # 加载 cookies 绕过机器人验证
+            "cookiefile": "cookies.txt",  # 加载 cookies 绕过机器人验证
             "no_warnings": True,
             # 🔥 兜底：强制用 ffmpeg 转码为 mp3，彻底解决格式不可用问题
             "postprocessor_args": ["-acodec", "libmp3lame", "-b:a", "320k"],
